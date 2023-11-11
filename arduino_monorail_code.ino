@@ -1,217 +1,239 @@
-// Components: 2x servo for arms, 2x limit sensors for start position and end position, 1 Arduino Nano, 1x L293D, 1x magnet sensor
+// Components: 2x servo for arms, 2x limit sensors for start position and end
+// position, 1 Arduino Nano, 1x L293D, 1x magnet sensor
 
-#include <Servo.h>
+#include <AccelStepper.h>
 
-enum State {
-  INIT, HOME, SETUP, RUN, POKE
+enum State { INIT, HOME, RUN, POKE, CALIBRATE };
+
+enum Rotation { COUNTER_CLOCKWISE, CLOCKWISE };
+
+enum PinMappings {
+  BUTTON_START,
+  BUTTON_CALIBRATION,
+  SENSOR_MAGNET,
+  SENSOR_BACK,
+  SENSOR_FRONT,
+  ARM_STEP_STEPPER,
+  ARM_STEP_DIR,
+  ARM_STEP_LIMIT_1,
+  ARM_STEP_LIMIT_2,
+  ENGINE_STEP_PWM,
+  ENGINE_STEP_CTRL_1,
+  ENGINE_STEP_CTRL_2,
+  _SIZE_LIMIT,
 };
 
-enum Rotation { 
-  COUNTER_CLOCKWISE, CLOCKWISE 
-  };
+static uint8_t const pin[_SIZE_LIMIT] = {
+    [BUTTON_START] = 10,      [BUTTON_CALIBRATION] = 11, [SENSOR_MAGNET] = A1,
+    [SENSOR_BACK] = 6,        [SENSOR_FRONT] = 7,        [ARM_STEP_STEPPER] = 5,
+    [ARM_STEP_DIR] = 4,       [ARM_STEP_LIMIT_1] = 3,    [ARM_STEP_LIMIT_2] = 2,
+    [ENGINE_STEP_PWM] = 10, // TODO Why is this equal to start button
+    [ENGINE_STEP_CTRL_1] = 8, [ENGINE_STEP_CTRL_2] = 9,
+};
 
-//enum Arms = {} In case arms should have their own states
+// enum Arms = {} In case arms should have their own states
 
 // Variables go here (needs some more structure):
-State state = SETUP;
+State state = INIT;
 State nextState;
 
-// Motor connections
-int engine = 9;
-int enginePin1 = 7;
-int enginePin2 = 8;
-
-// Start/Stop sensor
-int startSensor = 5;
-int stopSensor = 6;
-
-// Magnet sensor
-int magnetSensor = A1;
-
-// Servo 1, pin 3
-Servo servo1;
-
-// Servo 2, pin 4
-Servo servo2;
-
-int startButton = 2;
+// Stop int for pokearm
+int armstop = 0;
 
 // To store positioning of servo arms
 int pos = 0;
+
+int stop = 0;
+
+int motorInterfaceType = 1;
+
+// Stepmotor push speed
+int pushSpeed = 25;
+
+int calibrationCounter = 0;
+
+AccelStepper stepper =
+    AccelStepper(motorInterfaceType, pin[ARM_STEP_STEPPER], pin[ARM_STEP_DIR]);
 
 void setup() {
   // Startup
   Serial.begin(9600);
 
-  // Setup output pin modes
-  pinMode(engine, OUTPUT);
-  pinMode(enginePin1, OUTPUT);
-  pinMode(enginePin2, OUTPUT);
+  // Setup output pin modes step motor
+  pinMode(pin[ARM_STEP_LIMIT_1], INPUT_PULLUP);
+  pinMode(pin[ARM_STEP_LIMIT_2], INPUT_PULLUP);
+  stepper.setMaxSpeed(1000); // Max speed, for korv safety
+  stepper.setAcceleration(
+      30); // Max accelerartion, for not unintented pushing switches
 
-  // Setup input pin modes
-  pinMode(14, INPUT_PULLUP);
+  // Setup output pin modes
+  pinMode(pin[ENGINE_STEP_PWM], OUTPUT);
+  pinMode(pin[ENGINE_STEP_CTRL_1], OUTPUT);
+  pinMode(pin[ENGINE_STEP_CTRL_2], OUTPUT);
 
   // Make sure motors are off initially
-  digitalWrite(enginePin1, LOW);
-  digitalWrite(enginePin2, LOW);
+  digitalWrite(pin[ENGINE_STEP_CTRL_1], LOW);
+  digitalWrite(pin[ENGINE_STEP_CTRL_2], LOW);
 
-  // Servo 1,2 on pins 3,4
-  servo1.attach(3);
-  servo2.attach(4);
-
-  // Setup for sensors GPIO ports goes here:
-  pinMode(startSensor, INPUT_PULLUP);
-  pinMode(stopSensor, INPUT_PULLUP);
-
+  pinMode(pin[SENSOR_BACK], INPUT_PULLUP);
+  pinMode(pin[SENSOR_FRONT], INPUT_PULLUP);
+  pinMode(pin[BUTTON_START], INPUT_PULLUP);
+  pinMode(pin[BUTTON_CALIBRATION], INPUT_PULLUP);
 }
 
 void startMotor(Rotation rotation, int speed) {
   // code for starting the train, change int value to control speed
-  analogWrite(engine, speed);
+  analogWrite(pin[ENGINE_STEP_PWM], speed);
   if (rotation == CLOCKWISE) {
-    digitalWrite(enginePin1, HIGH);
-    digitalWrite(enginePin2, LOW);
-  }else{
-    digitalWrite(enginePin1, LOW);
-    digitalWrite(enginePin2, HIGH);
-}
+    digitalWrite(pin[ENGINE_STEP_CTRL_1], HIGH);
+    digitalWrite(pin[ENGINE_STEP_CTRL_2], LOW);
+  } else {
+    digitalWrite(pin[ENGINE_STEP_CTRL_1], LOW);
+    digitalWrite(pin[ENGINE_STEP_CTRL_2], HIGH);
+  }
 }
 
 void stopMotor() {
-  // Stops the engines
-  digitalWrite(enginePin1, LOW);
-  digitalWrite(enginePin2, LOW);
+  // Stops the pin[ENGINE_STEP_PWM]s
+  digitalWrite(pin[ENGINE_STEP_CTRL_1], LOW);
+  digitalWrite(pin[ENGINE_STEP_CTRL_2], LOW);
 }
 
-void lowerArms() {
-  // TO DO: Probably better to use sensors here since 
-  // delays won't be as accurate
-  servo1.write(0);
-  servo2.write(0);
-  delay(750);
-  servo1.write(90);
-  servo2.write(90);
-  delay(50);
+void pokeAction() {
+  if (stop == 0) {
+    for (int i = 0; i < 2; i++) {
+      int switchState = digitalRead(pin[ARM_STEP_LIMIT_1]);
+      if (i == 0) {
+        while (switchState == LOW) {
+          stepper.setSpeed(pushSpeed);
+          stepper.runSpeed();
+          switchState = digitalRead(pin[ARM_STEP_LIMIT_1]);
+        }
+        stepper.setCurrentPosition(0);
+      }
+      if (i == 1) {
+        switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
+        int k = 0;
+        while (switchState == LOW) {
+          stepper.setSpeed(-pushSpeed);
+          stepper.runSpeed();
+          switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
+        }
+      }
+    }
 
-}
-
-void raiseArms() {
-  // TO DO: Probably better to use sensors here since 
-  // delays won't be as accurate
-  servo1.write(180);
-  servo2.write(180); 
-  delay(750);
-  servo1.write(90);
-  servo2.write(90);
+    int stopPOS = stepper.currentPosition();
+    while (stepper.currentPosition() != stopPOS / 2) {
+      stepper.setSpeed(25);
+      stepper.runSpeed();
+    }
+    stop = 1;
+  }
+  stop = 0;
 }
 
 void toggle_lights() {
-  // code for toggling lights on/off, currently not used. 
+  // code for toggling lights on/off, currently not used.
 }
 
 void reversePolarity() {
-  if (enginePin1 == HIGH) {
-    digitalWrite(enginePin1, LOW);
-    digitalWrite(enginePin2, HIGH);
+  if (pin[ENGINE_STEP_CTRL_1] == HIGH) {
+    digitalWrite(pin[ENGINE_STEP_CTRL_1], LOW);
+    digitalWrite(pin[ENGINE_STEP_CTRL_2], HIGH);
   } else {
-    digitalWrite(enginePin1, HIGH);
-    digitalWrite(enginePin2, LOW);
+    digitalWrite(pin[ENGINE_STEP_CTRL_1], HIGH);
+    digitalWrite(pin[ENGINE_STEP_CTRL_2], LOW);
   }
+}
+
+void moveAvoidMagnetReadTwice() {
+  startMotor(CLOCKWISE, 50);
+  delay(1000);
 }
 
 void doStateAction() {
   switch (state) {
-    case INIT:
-      {
-        // DO NOTHING
-        break;
-      }
+  case INIT: {
+    // DO NOTHING
+    stopMotor();
+    break;
+  }
 
-    case HOME:
-      {
+  case HOME: {
+    startMotor(COUNTER_CLOCKWISE, 100);
+    break;
+  }
+  case RUN: {
+    startMotor(CLOCKWISE, 50);
+    break;
+  }
 
-        startMotor(COUNTER_CLOCKWISE, 255);
-        break;
-      }
-
-    case SETUP:
-      {
-        raiseArms();
-        break;
-      }
-
-    case RUN:
-      {
-        startMotor(CLOCKWISE, 255);
-        break;
-      }
-
-    case POKE:
-      {
-
-        stopMotor();
-        lowerArms();
-        raiseArms();
-        // To avoid re-reading the magnet sensor
-        startMotor(CLOCKWISE, 255);
-        delay(2000);
-        break;
-      }
+  case POKE: {
+    stopMotor();
+    pokeAction();
+    moveAvoidMagnetReadTwice();
+    break;
+  }
+  case CALIBRATE: {
+    stopMotor();
+    if (digitalRead(pin[BUTTON_START]) == LOW) {
+      pokeAction();
+      calibrationCounter++;
+    }
+    break;
+  }
   }
 }
 
 void handleStateMachine() {
   nextState = state;
   switch (state) {
-    case INIT:
-      {
-        if (digitalRead(startButton) == HIGH) {
-          nextState = HOME;
-        }
-        break;
-      }
+  case INIT: {
+    if (digitalRead(pin[BUTTON_START]) == LOW) {
+      pokeAction();
+      nextState = HOME;
+    }
+    break;
+  }
 
-    case HOME:
-      {
-        if (digitalRead(startSensor) == LOW) {
-          nextState = RUN;
-        }
-        if(digitalRead(startSensor) == LOW){
-          nextState = RUN;
-        }
-        break;
-      }
+  case HOME: {
+    if (digitalRead(pin[SENSOR_BACK]) == LOW) {
+      nextState = RUN;
+    }
+    break;
+  }
 
-    case SETUP:
-      {
-        nextState = RUN;
-        break;
+  case RUN: {
+    if (analogRead(pin[SENSOR_MAGNET]) < 100) {
+      if (digitalRead(pin[BUTTON_CALIBRATION]) == LOW) {
+        nextState = CALIBRATE;
+      } else {
+        nextState = POKE;
       }
-
-    case RUN:
-      {
-        if(analogRead(magnetSensor) < 100){
-          Serial.println(magnetSensor);
-          nextState = POKE; 
-        }
-        if(digitalRead(stopSensor) == LOW){
-          nextState = HOME;
-        }
-        break;
-      }
-
-    case POKE:
-      {
-        nextState = RUN;
-        break;
-      }
+    }
+    if (digitalRead(pin[SENSOR_FRONT]) == LOW) {
+      nextState = HOME;
+    }
+    break;
+  }
+  case POKE: {
+    nextState = RUN;
+    break;
+  }
+  case CALIBRATE: {
+    if (calibrationCounter >= 3) {
+      moveAvoidMagnetReadTwice();
+      nextState = RUN;
+      calibrationCounter = 0;
+    }
+    break;
+  }
   }
 }
 
 void loop() {
- // Serial.println(state); Uncomment for testing states
+  // Serial.println(state); //Uncomment for testing states
   doStateAction();
   handleStateMachine();
   state = nextState;
 }
-
