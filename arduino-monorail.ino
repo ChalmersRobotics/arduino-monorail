@@ -24,14 +24,19 @@ enum PinMappings {
 };
 
 static uint8_t const pin[_SIZE_LIMIT] = {
-    [BUTTON_START] = 10,      [BUTTON_CALIBRATION] = 11, [SENSOR_MAGNET] = A1,
-    [SENSOR_BACK] = 6,        [SENSOR_FRONT] = 7,        [ARM_STEP_STEPPER] = 5,
-    [ARM_STEP_DIR] = 4,       [ARM_STEP_LIMIT_1] = 3,    [ARM_STEP_LIMIT_2] = 2,
-    [ENGINE_STEP_PWM] = 10, // TODO Why is this equal to start button
-    [ENGINE_STEP_CTRL_1] = 8, [ENGINE_STEP_CTRL_2] = 9,
+  [BUTTON_START] = 10,
+  [BUTTON_CALIBRATION] = 11,
+  [SENSOR_MAGNET] = A1,
+  [SENSOR_BACK] = 6,
+  [SENSOR_FRONT] = 7,        
+  [ARM_STEP_STEPPER] = 5,
+  [ARM_STEP_DIR] = 4,
+  [ARM_STEP_LIMIT_1] = 3,
+  [ARM_STEP_LIMIT_2] = 2,
+  [ENGINE_STEP_PWM] = 10, // TODO Why is this equal to start button
+  [ENGINE_STEP_CTRL_1] = 8,
+  [ENGINE_STEP_CTRL_2] = 9,
 };
-
-// enum Arms = {} In case arms should have their own states
 
 // Variables go here (needs some more structure):
 State state = INIT;
