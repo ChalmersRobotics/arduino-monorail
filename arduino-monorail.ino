@@ -20,9 +20,11 @@ enum PinMappings {
   ENGINE_STEP_PWM,
   ENGINE_STEP_CTRL_1,
   ENGINE_STEP_CTRL_2,
+  LED_ESP_CTRL,
   _SIZE_LIMIT,
 };
 
+// clang-format off
 static uint8_t const pin[_SIZE_LIMIT] = {
   [BUTTON_START] = 10,
   [BUTTON_CALIBRATION] = 11,
@@ -36,7 +38,9 @@ static uint8_t const pin[_SIZE_LIMIT] = {
   [ENGINE_STEP_PWM] = 10, // TODO Why is this equal to start button
   [ENGINE_STEP_CTRL_1] = 8,
   [ENGINE_STEP_CTRL_2] = 9,
+  [LED_ESP_CTRL] = 12,
 };
+// clang-format on
 
 // Variables go here (needs some more structure):
 State state = INIT;
@@ -84,6 +88,7 @@ void setup() {
   pinMode(pin[SENSOR_FRONT], INPUT_PULLUP);
   pinMode(pin[BUTTON_START], INPUT_PULLUP);
   pinMode(pin[BUTTON_CALIBRATION], INPUT_PULLUP);
+  pinMode(pin[LED_ESP_CTRL], OUTPUT);
 }
 
 void startMotor(Rotation rotation, int speed) {
@@ -99,7 +104,6 @@ void startMotor(Rotation rotation, int speed) {
 }
 
 void stopMotor() {
-  // Stops the pin[ENGINE_STEP_PWM]s
   digitalWrite(pin[ENGINE_STEP_CTRL_1], LOW);
   digitalWrite(pin[ENGINE_STEP_CTRL_2], LOW);
 }
@@ -137,8 +141,12 @@ void pokeAction() {
   stop = 0;
 }
 
-void toggle_lights() {
-  // code for toggling lights on/off, currently not used.
+void toggleLights() {
+    digitalWrite(pin[LED_ESP_CTRL], LOW);
+    delay(100);
+    digitalWrite(pin[LED_ESP_CTRL], HIGH);
+    delay(100);
+    digitalWrite(pin[LED_ESP_CTRL], LOW);
 }
 
 void reversePolarity() {
@@ -197,6 +205,7 @@ void handleStateMachine() {
     if (digitalRead(pin[BUTTON_START]) == LOW) {
       pokeAction();
       nextState = HOME;
+      toggleLights();
     }
     break;
   }
@@ -204,6 +213,7 @@ void handleStateMachine() {
   case HOME: {
     if (digitalRead(pin[SENSOR_BACK]) == LOW) {
       nextState = RUN;
+      toggleLights();
     }
     break;
   }
@@ -223,6 +233,7 @@ void handleStateMachine() {
   }
   case POKE: {
     nextState = RUN;
+    toggleLights();
     break;
   }
   case CALIBRATE: {
