@@ -141,14 +141,6 @@ void pokeAction() {
   stop = 0;
 }
 
-void toggleLights() {
-    digitalWrite(pin[LED_ESP_CTRL], LOW);
-    delay(100);
-    digitalWrite(pin[LED_ESP_CTRL], HIGH);
-    delay(100);
-    digitalWrite(pin[LED_ESP_CTRL], LOW);
-}
-
 void reversePolarity() {
   if (pin[ENGINE_STEP_CTRL_1] == HIGH) {
     digitalWrite(pin[ENGINE_STEP_CTRL_1], LOW);
@@ -205,7 +197,6 @@ void handleStateMachine() {
     if (digitalRead(pin[BUTTON_START]) == LOW) {
       pokeAction();
       nextState = HOME;
-      toggleLights();
     }
     break;
   }
@@ -213,7 +204,6 @@ void handleStateMachine() {
   case HOME: {
     if (digitalRead(pin[SENSOR_BACK]) == LOW) {
       nextState = RUN;
-      toggleLights();
     }
     break;
   }
@@ -233,7 +223,6 @@ void handleStateMachine() {
   }
   case POKE: {
     nextState = RUN;
-    toggleLights();
     break;
   }
   case CALIBRATE: {
