@@ -3,7 +3,7 @@
 
 #include <AccelStepper.h>
 
-enum State { INIT, HOME, RUN, POKE, CALIBRATE };
+enum State { INIT, HOME, RUN, POKE, CALIBRATE, PAUS };
 
 enum Rotation { COUNTER_CLOCKWISE, CLOCKWISE };
 
@@ -35,7 +35,7 @@ static uint8_t const pin[_SIZE_LIMIT] = {
   [ARM_STEP_DIR] = 4,
   [ARM_STEP_LIMIT_1] = 3,
   [ARM_STEP_LIMIT_2] = 2,
-  [ENGINE_STEP_PWM] = 10, // TODO Why is this equal to start button
+  [ENGINE_STEP_PWM] = A5,
   [ENGINE_STEP_CTRL_1] = 8,
   [ENGINE_STEP_CTRL_2] = 9,
   [LED_ESP_CTRL] = 12,
@@ -45,6 +45,7 @@ static uint8_t const pin[_SIZE_LIMIT] = {
 // Variables go here (needs some more structure):
 State state = INIT;
 State nextState;
+State oldState;
 
 // Stop int for pokearm
 int armstop = 0;
@@ -60,6 +61,9 @@ int motorInterfaceType = 1;
 int pushSpeed = 25;
 
 int calibrationCounter = 0;
+
+// Dc motor speed
+int motorSpeed = 150;
 
 AccelStepper stepper =
     AccelStepper(motorInterfaceType, pin[ARM_STEP_STEPPER], pin[ARM_STEP_DIR]);
@@ -152,7 +156,7 @@ void reversePolarity() {
 }
 
 void moveAvoidMagnetReadTwice() {
-  startMotor(CLOCKWISE, 50);
+  startMotor(CLOCKWISE, motorSpeed);
   delay(1000);
 }
 
@@ -165,11 +169,11 @@ void doStateAction() {
   }
 
   case HOME: {
-    startMotor(COUNTER_CLOCKWISE, 100);
+    startMotor(COUNTER_CLOCKWISE, motorSpeed);
     break;
   }
   case RUN: {
-    startMotor(CLOCKWISE, 50);
+    startMotor(CLOCKWISE, motorSpeed);
     break;
   }
 
@@ -185,6 +189,11 @@ void doStateAction() {
       pokeAction();
       calibrationCounter++;
     }
+    break;
+  }
+  case PAUS: {
+    stopMotor();
+    delay(10000);
     break;
   }
   }
@@ -203,7 +212,7 @@ void handleStateMachine() {
 
   case HOME: {
     if (digitalRead(pin[SENSOR_BACK]) == LOW) {
-      nextState = RUN;
+      nextState = PAUS;
     }
     break;
   }
@@ -233,12 +242,17 @@ void handleStateMachine() {
     }
     break;
   }
+  case PAUS: {
+      nextState = RUN;
+      break;
+  }
   }
 }
 
 void loop() {
-  // Serial.println(state); //Uncomment for testing states
+  //Serial.println(state); //Uncomment for testing states
   doStateAction();
   handleStateMachine();
   state = nextState;
+  
 }
