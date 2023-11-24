@@ -123,6 +123,7 @@ void pokeAction() {
           switchState = digitalRead(pin[ARM_STEP_LIMIT_1]);
         }
         stepper.setCurrentPosition(0);
+        toggleLights();
       }
       if (i == 1) {
         switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
@@ -132,6 +133,7 @@ void pokeAction() {
           stepper.runSpeed();
           switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
         }
+        toggleLights();
       }
     }
 
@@ -143,6 +145,14 @@ void pokeAction() {
     stop = 1;
   }
   stop = 0;
+}
+
+void toggleLights() {
+    digitalWrite(pin[LED_ESP_CTRL], LOW);
+    delay(100);
+    digitalWrite(pin[LED_ESP_CTRL], HIGH);
+    delay(100);
+    digitalWrite(pin[LED_ESP_CTRL], LOW);
 }
 
 void reversePolarity() {
