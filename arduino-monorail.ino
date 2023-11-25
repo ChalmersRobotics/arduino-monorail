@@ -2,6 +2,7 @@
 // position, 1 Arduino Nano, 1x L293D, 1x magnet sensor
 
 #include <AccelStepper.h>
+#define SECONDS_IN_MILLISECONDS(seconds) (1000UL * seconds)
 
 enum State { INIT, HOME, RUN, POKE, CALIBRATE, PAUS };
 
@@ -64,6 +65,11 @@ int calibrationCounter = 0;
 
 // Dc motor speed
 int motorSpeed = 150;
+
+bool ignoreFirstDelay = true; 
+
+// Change this based on what song is played
+unsigned long songLengthDelayMilliseconds = SECONDS_IN_MILLISECONDS(180);
 
 AccelStepper stepper =
     AccelStepper(motorInterfaceType, pin[ARM_STEP_STEPPER], pin[ARM_STEP_DIR]);
@@ -203,7 +209,11 @@ void doStateAction() {
   }
   case PAUS: {
     stopMotor();
-    delay(10000);
+    if (!ignoreFirstDelay) {
+      delay(songLengthDelayMilliseconds);
+    } else {
+      ignoreFirstDelay = false;
+    }
     break;
   }
   }
@@ -253,7 +263,7 @@ void handleStateMachine() {
     break;
   }
   case PAUS: {
-      nextState = RUN;
+      nextState = POKE;
       break;
   }
   }
