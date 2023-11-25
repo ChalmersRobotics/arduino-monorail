@@ -58,7 +58,7 @@ int stop = 0;
 int motorInterfaceType = 1;
 
 // Stepmotor push speed
-int pushSpeed = 25;
+int pushSpeed = 15;
 
 int calibrationCounter = 0;
 
@@ -72,12 +72,14 @@ void setup() {
   // Startup
   Serial.begin(9600);
 
+  
+
   // Setup output pin modes step motor
   pinMode(pin[ARM_STEP_LIMIT_1], INPUT_PULLUP);
   pinMode(pin[ARM_STEP_LIMIT_2], INPUT_PULLUP);
   stepper.setMaxSpeed(1000); // Max speed, for korv safety
   stepper.setAcceleration(
-      30); // Max accelerartion, for not unintented pushing switches
+     30); // Max accelerartion, for not unintented pushing switches
 
   // Setup output pin modes
   pinMode(pin[ENGINE_STEP_PWM], OUTPUT);
@@ -118,19 +120,21 @@ void pokeAction() {
       int switchState = digitalRead(pin[ARM_STEP_LIMIT_1]);
       if (i == 0) {
         while (switchState == LOW) {
+          switchState = digitalRead(pin[ARM_STEP_LIMIT_1]);
           stepper.setSpeed(pushSpeed);
           stepper.runSpeed();
-          switchState = digitalRead(pin[ARM_STEP_LIMIT_1]);
         }
         stepper.setCurrentPosition(0);
+        delay(500);
       }
       if (i == 1) {
         switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
         int k = 0;
         while (switchState == LOW) {
+          switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
           stepper.setSpeed(-pushSpeed);
           stepper.runSpeed();
-          switchState = digitalRead(pin[ARM_STEP_LIMIT_2]);
+          
         }
       }
     }
@@ -161,14 +165,14 @@ void reversePolarity() {
 
 void moveAvoidMagnetReadTwice() {
   startMotor(CLOCKWISE, motorSpeed);
-  delay(1000);
+  delay(500);
 }
 
 void doStateAction() {
   switch (state) {
   case INIT: {
-    // DO NOTHING
     stopMotor();
+    // DO NOTHING
     break;
   }
 
@@ -183,9 +187,9 @@ void doStateAction() {
 
   case POKE: {
     stopMotor();
-    toggleLedMode(1);
+    toggleLedMode(HIGH);
     pokeAction();
-    toggleLedMode(0);
+    toggleLedMode(LOW);
     moveAvoidMagnetReadTwice();
     break;
   }
@@ -224,7 +228,7 @@ void handleStateMachine() {
   }
 
   case RUN: {
-    if (analogRead(pin[SENSOR_MAGNET]) < 100) {
+    if (analogRead(pin[SENSOR_MAGNET]) < 150) {
       if (digitalRead(pin[BUTTON_CALIBRATION]) == LOW) {
         nextState = CALIBRATE;
       } else {
